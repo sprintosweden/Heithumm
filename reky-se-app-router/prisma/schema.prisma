@@ -1,0 +1,310 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // NOTE: When using postgresql, mysql or sqlserver, uncomment the @db.Text annotations in model Account below
+  // Further reading:
+  // https://next-auth.js.org/adapters/prisma#create-the-prisma-schema
+  // https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#string
+  url      = env("DATABASE_URL")
+}
+
+
+model Example {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Necessary for Next auth
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  ext_expires_in    Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String          @id @default(cuid())
+  name          String?
+  email         String?         @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  matchEvent    MatchEvent[]
+  educatorEvent EducatorEvent[]
+}
+
+enum Location {
+  ON_SITE
+  REMOTE
+  HYBRID
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  MATCH_COMPLETED
+  MISSED_OPPORTUNITY
+}
+
+enum InvoiceType {
+  MONTHLY
+  AFTER_COMPLETION
+  RECRUITMENT_FEE
+}
+
+model Course {
+  id          String        @id @default(cuid())
+  name        String
+  description String
+  schoolId    String
+  signed      Boolean
+  status      CourseStatus  @default(DRAFT)
+  points      Int
+  location    Location
+  startDate   DateTime
+  endDate     DateTime
+  school      School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  subjects    Subject[]
+  match       Match[]
+  courseEvent CourseEvent[]
+  educators   Educator[]
+  program     Program?      @relation(fields: [programId], references: [id])
+  programId   String?
+  files       File[]
+  hourlyRate  Float?
+  commission  Float?
+  invoiceType InvoiceType?
+}
+
+model File {
+  id         String    @id @default(cuid())
+  fileName   String
+  course     Course?   @relation(fields: [courseId], references: [id])
+  courseId   String?
+  educator   Educator? @relation(fields: [educatorId], references: [id])
+  educatorId String?
+  fileType   FileType
+}
+
+enum FileType {
+  COURSE_MEMO
+  COURSE_PLAN
+  AGREEMENT
+  CV
+  OTHER
+}
+
+model CourseEvent {
+  id                String    @id @default(cuid())
+  startTime         DateTime
+  durationInMinutes Int
+  course            Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId          String
+  educator          Educator? @relation(fields: [educatorId], references: [id])
+  educatorId        String?
+}
+
+model Subject {
+  id       String     @id @default(cuid())
+  name     String
+  courses  Course[]
+  educator Educator[]
+}
+
+enum ContractType {
+  REKY_EMPLOYMENT
+  SPRINTO_EMPLOYMENT
+  FREELANCE
+  PARTNER
+} 
+
+model Educator {
+  id            String          @id @default(cuid())
+  contactId     String
+  contact       Contact         @relation(fields: [contactId], references: [id])
+  subjects      Subject[]
+  comment       String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  network       Boolean         @default(false)
+  match         Match[]
+  educatorEvent EducatorEvent[]
+  course        Course[]
+  courseId      String?
+  courseEvent   CourseEvent[]
+  files         File[]
+  contractType  ContractType?
+}
+
+enum EducatorEventStatus {
+  DEFAULT
+  UNDER_VERIFICATION
+  AVAILABLE
+  UNAVAILABLE
+  NOT_VERIFIED
+  UPCOMING_APPOINTMENT
+  REFERENCE_TAKEN
+}
+
+model EducatorEvent {
+  id         String              @id @default(cuid())
+  comment    String?
+  status     EducatorEventStatus
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  createdBy  User                @relation(fields: [userId], references: [id])
+  educator   Educator            @relation(fields: [educatorId], references: [id], onDelete: Cascade)
+  userId     String
+  educatorId String
+}
+
+model Contact {
+  id            String          @id @default(cuid())
+  firstname     String
+  lastname      String
+  email         String
+  phone         String
+  city          String?
+  educator      Educator[]
+  schoolContact SchoolContact[]
+}
+
+model SchoolContact {
+  id        String  @id @default(cuid())
+  role      String
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id])
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id])
+}
+
+model School {
+  id                 String          @id @default(cuid())
+  name               String
+  courses            Course[]
+  schoolContact      SchoolContact[]
+  program            Program[]
+  city               String?
+  defaultInvoiceType InvoiceType?
+}
+
+model Program {
+  id        String   @id @default(cuid())
+  name      String
+  school    School   @relation(fields: [schoolId], references: [id])
+  courses   Course[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  schoolId  String
+}
+
+enum MatchingEventStatus {
+  INITIALIZED
+  EDUCATOR_CONTACTED_AWAITING_RESPONSE
+  INTERNAL_TASK
+  CV_POSTED_TO_SCHOOL
+  INTERVIEW_SCHEDULED
+  AWAITING_SCHOOL_DECISION
+  REJECTED_BY_CANDIDATE
+  REJECTED_BY_SCHOOL
+  AGREEMENT_SENT
+  MATCH_SUCCESSFUL
+}
+
+model Match {
+  id         String       @id @default(cuid())
+  educator   Educator     @relation(fields: [educatorId], references: [id], onDelete: Cascade)
+  course     Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  eventLog   MatchEvent[]
+  educatorId String
+  courseId   String
+}
+
+model MatchEvent {
+  id        String              @id @default(cuid())
+  comment   String?
+  status    MatchingEventStatus
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  createdBy User                @relation(fields: [userId], references: [id])
+  match     Match?              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  matchId   String?
+  userId    String
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model NewApplicant {
+  id               String   @id @default(cuid())
+  firstname        String
+  lastname         String
+  email            String   @unique
+  phone            String
+  schoolOrEducator String
+  expertises       String
+  schoolName       String?
+  createdAt        DateTime @default(now())
+}
+
+model PollAnswer {
+  id    String @id @default(cuid())
+  value String
+}
+
+model Survey {
+  id         String           @id @default(cuid())
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  questions  SurveyQuestion[]
+  accessCode String
+  title      String
+}
+
+model SurveyQuestion {
+  id       String         @id @default(cuid())
+  question String
+  answer   SurveyAnswer[]
+  survey   Survey         @relation(fields: [surveyId], references: [id])
+  surveyId String
+}
+
+model SurveyAnswer {
+  id         String         @id @default(cuid())
+  answer     String
+  question   SurveyQuestion @relation(fields: [questionId], references: [id])
+  questionId String
+}
